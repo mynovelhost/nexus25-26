@@ -33,9 +33,9 @@ import org.sonatype.nexus.repository.content.Asset;
 import org.sonatype.nexus.repository.content.AssetBlob;
 import org.sonatype.nexus.repository.content.Component;
 import org.sonatype.nexus.repository.content.facet.ContentFacet;
-import org.sonatype.nexus.repository.content.facet.ContentMaintenanceFacet;
 import org.sonatype.nexus.repository.content.fluent.FluentAsset;
 import org.sonatype.nexus.repository.content.fluent.FluentComponent;
+import org.sonatype.nexus.repository.content.maintenance.ContentMaintenanceFacet;
 import org.sonatype.nexus.repository.manager.RepositoryManager;
 
 import org.joda.time.DateTime;
@@ -59,15 +59,20 @@ public class DatastoreComponentAssetTestHelper
   private RepositoryManager repositoryManager;
 
   @Override
-  public DateTime getCreatedTime(final Repository repository, final String path) {
+  public DateTime getBlobCreatedTime(final Repository repository, final String path) {
     return findAssetByPathNotNull(repository, path).blob().map(AssetBlob::blobCreated)
         .map(DateHelper::toDateTime).orElse(null);
   }
 
   @Override
+  public DateTime getAssetCreatedTime(final Repository repository, final String path) {
+    return DateHelper.toDateTime(findAssetByPathNotNull(repository, path).created());
+  }
+
+  @Override
   public DateTime getUpdatedTime(final Repository repository, final String path) {
     // AssetBlobs are immutable so the created time is the equivalent of the old updated time.
-    return getCreatedTime(repository, path);
+    return getBlobCreatedTime(repository, path);
   }
 
   @Override

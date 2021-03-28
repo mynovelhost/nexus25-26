@@ -28,9 +28,11 @@ import org.sonatype.nexus.common.entity.Continuation;
 import org.sonatype.nexus.common.hash.HashAlgorithm;
 import org.sonatype.nexus.content.maven.MavenArchetypeCatalogFacet;
 import org.sonatype.nexus.content.maven.MavenContentFacet;
+import org.sonatype.nexus.content.maven.internal.event.RebuildMavenArchetypeCatalogEvent;
 import org.sonatype.nexus.repository.FacetSupport;
 import org.sonatype.nexus.repository.config.Configuration;
 import org.sonatype.nexus.repository.content.fluent.FluentComponent;
+import org.sonatype.nexus.repository.content.fluent.FluentQuery;
 import org.sonatype.nexus.repository.maven.MavenPath;
 import org.sonatype.nexus.repository.maven.MavenPath.HashType;
 import org.sonatype.nexus.repository.maven.internal.Constants;
@@ -38,7 +40,10 @@ import org.sonatype.nexus.repository.maven.internal.utils.HashedPayload;
 import org.sonatype.nexus.repository.view.Payload;
 
 import com.google.common.collect.Iterables;
+import com.google.common.eventbus.AllowConcurrentEvents;
+import com.google.common.eventbus.Subscribe;
 import com.google.common.hash.HashCode;
+import org.apache.commons.lang.StringUtils;
 import org.apache.maven.archetype.catalog.Archetype;
 import org.apache.maven.archetype.catalog.ArchetypeCatalog;
 
@@ -51,7 +56,7 @@ import static org.sonatype.nexus.repository.view.ContentTypes.APPLICATION_XML;
 /**
  * Rebuilds the maven archetype catalog for a given repository.
  *
- * @since 3.25.0
+ * @since 3.25
  */
 @Named
 public class MavenArchetypeCatalogFacetImpl
@@ -62,7 +67,7 @@ public class MavenArchetypeCatalogFacetImpl
 
   private static final String XML = "xml";
 
-  private static final String MAVEN_ARCHETYPE_KIND = "maven-archetype";
+  public static final String MAVEN_ARCHETYPE_KIND = "maven-archetype";
 
   private static final String ARCHETYPE_CATALOG_PATH = "/" + Constants.ARCHETYPE_CATALOG_FILENAME;
 
@@ -85,8 +90,18 @@ public class MavenArchetypeCatalogFacetImpl
         .parsePath(ARCHETYPE_CATALOG_PATH);
   }
 
+  @Subscribe
+  @AllowConcurrentEvents
+  public void on(final RebuildMavenArchetypeCatalogEvent event) throws IOException {
+    if (StringUtils.equals(getRepository().getName(), event.getRepositoryName())) {
+      rebuildArchetypeCatalog();
+    }
+  }
+
   @Override
   public void rebuildArchetypeCatalog() throws IOException {
+    deleteExistingCatalog();
+
     log.debug("Rebuilding hosted archetype catalog for {}", getRepository().getName());
 
     Path path = Files.createTempFile(HOSTED_ARCHETYPE_CATALOG, XML);
@@ -103,6 +118,13 @@ public class MavenArchetypeCatalogFacetImpl
     }
     finally {
       Files.delete(path);
+    }
+  }
+
+  private void deleteExistingCatalog() throws IOException {
+    mavenContentFacet.delete(archetypeCatalogMavenPath);
+    for (HashType hashType : HashType.values()) {
+      mavenContentFacet.delete(archetypeCatalogMavenPath.main().hash(hashType));
     }
   }
 
@@ -132,12 +154,11 @@ public class MavenArchetypeCatalogFacetImpl
   private Iterable<Archetype> getArchetypes() {
     List<Archetype> archetypes = new ArrayList<>();
 
-    Continuation<FluentComponent> components =
-        mavenContentFacet.components().browse(MAVEN_ARCHETYPE_KIND, componentPageSize, null);
+    FluentQuery<FluentComponent> archetypeQuery = mavenContentFacet.components().byKind(MAVEN_ARCHETYPE_KIND);
+    Continuation<FluentComponent> components = archetypeQuery.browse(componentPageSize, null);
     while (!components.isEmpty()) {
       archetypes.addAll(components.stream().map(this::toArchetype).collect(toList()));
-      components = mavenContentFacet.
-          components().browse(MAVEN_ARCHETYPE_KIND, componentPageSize, components.nextContinuationToken());
+      components = archetypeQuery.browse(componentPageSize, components.nextContinuationToken());
     }
     return archetypes;
   }

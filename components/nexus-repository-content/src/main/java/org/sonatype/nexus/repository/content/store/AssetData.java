@@ -22,6 +22,7 @@ import org.sonatype.nexus.repository.content.Asset;
 import org.sonatype.nexus.repository.content.AssetBlob;
 import org.sonatype.nexus.repository.content.Component;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static java.util.Optional.ofNullable;
 import static org.sonatype.nexus.repository.content.store.InternalIds.internalAssetBlobId;
@@ -94,10 +95,11 @@ public class AssetData
   }
 
   /**
-   * Sets the asset path.
+   * Sets the asset path; asset paths must start with a slash.
    */
   public void setPath(final String path) {
-    this.path = checkNotNull(path);
+    checkArgument(path != null && path.charAt(0) == '/', "Paths must start with a slash");
+    this.path = path;
   }
 
   /**

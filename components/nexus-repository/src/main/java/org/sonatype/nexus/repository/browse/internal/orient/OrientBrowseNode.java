@@ -32,7 +32,7 @@ import static com.google.common.base.Preconditions.checkState;
  */
 public class OrientBrowseNode
     extends AbstractEntity
-    implements BrowseNode<EntityId>
+    implements BrowseNode
 {
   private String repositoryName;
 
@@ -149,8 +149,8 @@ public class OrientBrowseNode
 
   public void setPaths(final List<? extends BrowsePath> paths) {
     setParentPath(joinPath(
-        paths.subList(0, paths.size() - 1).stream().map(BrowsePath::getBrowsePath).collect(Collectors.toList())));
-    setName(paths.get(paths.size() - 1).getBrowsePath());
+        paths.subList(0, paths.size() - 1).stream().map(BrowsePath::getDisplayName).collect(Collectors.toList())));
+    setName(paths.get(paths.size() - 1).getDisplayName());
     setPath(paths.get(paths.size() - 1).getRequestPath());
   }
 
@@ -173,6 +173,7 @@ public class OrientBrowseNode
   }
 
   @Nullable
+  @Override
   public String getPackageUrl() {
     return packageUrl;
   }

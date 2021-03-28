@@ -14,7 +14,6 @@ package org.sonatype.nexus.repository.content.browse;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 
 import org.sonatype.goodies.testsupport.TestSupport;
 import org.sonatype.nexus.repository.browse.node.BrowsePath;
@@ -57,14 +56,14 @@ public class BrowseTestSupport
     assertThat(expectedRequestPaths.size(), is(expectedBrowsePaths.size()));
     assertThat(paths.size(), is(expectedBrowsePaths.size()));
 
-    String requestPath = "";
+    String requestPath = "/";
 
     for (int i = 0; i < expectedBrowsePaths.size(); i++) {
       requestPath += expectedRequestPaths.get(i);
       if (withTrailingSlash || i < expectedBrowsePaths.size() - 1) {
         requestPath += "/";
       }
-      assertThat(paths.get(i).getBrowsePath(), is(expectedBrowsePaths.get(i)));
+      assertThat(paths.get(i).getDisplayName(), is(expectedBrowsePaths.get(i)));
       assertThat(paths.get(i).getRequestPath(), is(requestPath));
     }
   }

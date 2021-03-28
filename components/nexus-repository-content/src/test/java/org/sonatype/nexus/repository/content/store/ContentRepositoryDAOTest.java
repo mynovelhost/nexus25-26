@@ -18,10 +18,10 @@ import java.util.UUID;
 import org.sonatype.nexus.common.entity.EntityId;
 import org.sonatype.nexus.common.entity.EntityUUID;
 import org.sonatype.nexus.datastore.api.DataSession;
+import org.sonatype.nexus.datastore.api.DuplicateKeyException;
 import org.sonatype.nexus.repository.content.ContentRepository;
 import org.sonatype.nexus.repository.content.store.example.TestContentRepositoryDAO;
 
-import org.apache.ibatis.exceptions.PersistenceException;
 import org.junit.Test;
 
 import static org.hamcrest.Matchers.allOf;
@@ -85,7 +85,7 @@ public class ContentRepositoryDAOTest
       session.getTransaction().commit();
       fail("Cannot create the same repository twice");
     }
-    catch (PersistenceException e) {
+    catch (DuplicateKeyException e) {
       logger.debug("Got expected exception", e);
     }
 
@@ -189,17 +189,21 @@ public class ContentRepositoryDAOTest
 
     try (DataSession<?> session = sessionRule.openSession("content")) {
       ContentRepositoryDAO dao = session.access(TestContentRepositoryDAO.class);
+      ContentRepositoryData candidate = new ContentRepositoryData();
 
-      assertTrue(dao.deleteContentRepository(configRepositoryId1));
+      candidate.setConfigRepositoryId(configRepositoryId1);
+      assertTrue(dao.deleteContentRepository(candidate));
 
       assertThat(dao.browseContentRepositories(),
           contains(allOf(sameConfigRepository(contentRepository2), sameAttributes(contentRepository2))));
 
-      assertTrue(dao.deleteContentRepository(configRepositoryId2));
+      candidate.setConfigRepositoryId(configRepositoryId2);
+      assertTrue(dao.deleteContentRepository(candidate));
 
       assertThat(dao.browseContentRepositories(), emptyIterable());
 
-      assertFalse(dao.deleteContentRepository(new EntityUUID(new UUID(0, 0))));
+      candidate.setConfigRepositoryId(new EntityUUID(new UUID(0, 0)));
+      assertFalse(dao.deleteContentRepository(candidate));
     }
   }
 }

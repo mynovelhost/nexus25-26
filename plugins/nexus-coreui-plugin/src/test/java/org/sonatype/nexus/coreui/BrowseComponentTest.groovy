@@ -16,9 +16,9 @@ import javax.inject.Provider
 
 import org.sonatype.nexus.common.entity.EntityId
 import org.sonatype.nexus.repository.Repository
-import org.sonatype.nexus.repository.browse.internal.orient.OrientBrowseNode
+import org.sonatype.nexus.repository.browse.node.BrowseNode
 import org.sonatype.nexus.repository.browse.node.BrowseNodeConfiguration
-import org.sonatype.nexus.repository.browse.node.BrowseNodeStore
+import org.sonatype.nexus.repository.browse.node.BrowseNodeQueryService
 import org.sonatype.nexus.repository.manager.RepositoryManager
 import org.sonatype.nexus.repository.ossindex.VulnerabilityService
 
@@ -40,7 +40,7 @@ class BrowseComponentTest
 
   BrowseNodeConfiguration configuration = new BrowseNodeConfiguration()
 
-  BrowseNodeStore browseNodeStore = Mock()
+  BrowseNodeQueryService browseNodeQueryService = Mock()
 
   RepositoryManager repositoryManager = Mock()
 
@@ -53,7 +53,7 @@ class BrowseComponentTest
   Provider<VulnerabilityService> vulnerabilityServiceProvider = Mock() { get() >> Mock(VulnerabilityService) }
 
   @Subject
-  BrowseComponent browseComponent = new BrowseComponent(configuration: configuration, browseNodeStore: browseNodeStore,
+  BrowseComponent browseComponent = new BrowseComponent(configuration: configuration, browseNodeQueryService: browseNodeQueryService,
       repositoryManager: repositoryManager, vulnerabilityServiceProvider: vulnerabilityServiceProvider)
 
   def setup() {
@@ -63,15 +63,12 @@ class BrowseComponentTest
 
   def "Root node list query"() {
     given: 'These test objects'
-      def browseNodes = [Mock(OrientBrowseNode) { _ * getName() >> 'com'
-                                            _ * getPackageUrl() >> null},
-                         Mock(OrientBrowseNode) { _ * getName() >> 'org'
-                                            _ * getComponentId() >> componentId
-                                            _ * getPackageUrl() >> null},
-                         Mock(OrientBrowseNode) { _ * getName() >> 'net'
+      def browseNodes = [Mock(BrowseNode) { _ * getName() >> 'com' },
+                         Mock(BrowseNode) { _ * getName() >> 'org'
+                                            _ * getComponentId() >> componentId },
+                         Mock(BrowseNode) { _ * getName() >> 'net'
                                             _ * getAssetId() >> assetId
-                                            _ * isLeaf() >> true
-                                            _ * getPackageUrl() >> null}]
+                                            _ * isLeaf() >> true }]
 
     when: 'Requesting the list of root nodes'
       TreeStoreLoadParameters treeStoreLoadParameters = new TreeStoreLoadParameters(
@@ -79,7 +76,7 @@ class BrowseComponentTest
           node: ROOT)
 
       1 * repositoryManager.get(REPOSITORY_NAME) >> repository
-      1 * browseNodeStore.getByPath(REPOSITORY_NAME, [], configuration.maxHtmlNodes) >> browseNodes
+      1 * browseNodeQueryService.getByPath(repository, [], configuration.maxHtmlNodes) >> browseNodes
       List<BrowseNodeXO> xos = browseComponent.read(treeStoreLoadParameters)
 
     then: 'the 3 root entries are returned'
@@ -91,15 +88,12 @@ class BrowseComponentTest
 
   def "non-root list query"() {
     given: 'These test objects'
-      def browseNodes = [Mock(OrientBrowseNode) { _ * getName() >> 'com'
-                                            _ * getPackageUrl() >> null},
-                         Mock(OrientBrowseNode) { _ * getName() >> 'org'
-                                            _ * getComponentId() >> componentId
-                                            _ * getPackageUrl() >> null},
-                         Mock(OrientBrowseNode) { _ * getName() >> 'net'
+      def browseNodes = [Mock(BrowseNode) { _ * getName() >> 'com' },
+                         Mock(BrowseNode) { _ * getName() >> 'org'
+                                            _ * getComponentId() >> componentId },
+                         Mock(BrowseNode) { _ * getName() >> 'net'
                                             _ * getAssetId() >> assetId
-                                            _ * isLeaf() >> true
-                                            _ * getPackageUrl() >> null}]
+                                            _ * isLeaf() >> true }]
 
     when: 'Requesting the list of root nodes'
       TreeStoreLoadParameters treeStoreLoadParameters = new TreeStoreLoadParameters(
@@ -107,7 +101,7 @@ class BrowseComponentTest
           node: 'com/boogie/down')
 
       1 * repositoryManager.get(REPOSITORY_NAME) >> repository
-      1 * browseNodeStore.getByPath(REPOSITORY_NAME, ['com','boogie','down'], configuration.maxHtmlNodes) >> browseNodes
+      1 * browseNodeQueryService.getByPath(repository, ['com','boogie','down'], configuration.maxHtmlNodes) >> browseNodes
       List<BrowseNodeXO> xos = browseComponent.read(treeStoreLoadParameters)
 
     then: 'the 3 entries are returned'
@@ -119,14 +113,12 @@ class BrowseComponentTest
 
   def 'validate encoded segments'() {
     given: 'These test objects'
-      def browseNodes = [Mock(OrientBrowseNode) { _ * getName() >> 'com' },
-                         Mock(OrientBrowseNode) { _ * getName() >> 'org'
-                                            _ * getComponentId() >> componentId
-                                            _ * getPackageUrl() >> null},
-                         Mock(OrientBrowseNode) { _ * getName() >> 'n/e/t'
+      def browseNodes = [Mock(BrowseNode) { _ * getName() >> 'com' },
+                         Mock(BrowseNode) { _ * getName() >> 'org'
+                                            _ * getComponentId() >> componentId },
+                         Mock(BrowseNode) { _ * getName() >> 'n/e/t'
                                             _ * getAssetId() >> assetId
-                                            _ * isLeaf() >> true
-                                            _ * getPackageUrl() >> null}]
+                                            _ * isLeaf() >> true }]
 
     when: 'Requesting the list of root nodes'
     TreeStoreLoadParameters treeStoreLoadParameters = new TreeStoreLoadParameters(
@@ -134,7 +126,7 @@ class BrowseComponentTest
         node: 'com/boo%2Fgie/down')
 
       1 * repositoryManager.get(REPOSITORY_NAME) >> repository
-      1 * browseNodeStore.getByPath(REPOSITORY_NAME, ['com','boo/gie','down'], configuration.maxHtmlNodes) >> browseNodes
+      1 * browseNodeQueryService.getByPath(repository, ['com','boo/gie','down'], configuration.maxHtmlNodes) >> browseNodes
     List<BrowseNodeXO> xos = browseComponent.read(treeStoreLoadParameters)
 
     then: 'the 3 entries are returned'

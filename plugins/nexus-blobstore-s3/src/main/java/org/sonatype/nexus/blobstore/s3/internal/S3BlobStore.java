@@ -145,6 +145,8 @@ public class S3BlobStore
 
   private S3Copier copier;
 
+  private boolean preferExpire;
+
   private S3BlobStoreMetricsStore storeMetrics;
 
   private LoadingCache<BlobId, S3Blob> liveBlobs;
@@ -156,6 +158,7 @@ public class S3BlobStore
                      final BlobIdLocationResolver blobIdLocationResolver,
                      @Named("${nexus.s3.uploaderName:-parallelUploader}") final S3Uploader uploader,
                      @Named("${nexus.s3.copierName:-parallelCopier}") final S3Copier copier,
+                     @Named("${nexus.s3.preferExpire:-false}") final boolean preferExpire,
                      final S3BlobStoreMetricsStore storeMetrics,
                      final DryRunPrefix dryRunPrefix,
                      final BucketManager bucketManager)
@@ -316,6 +319,8 @@ public class S3BlobStore
   public Blob get(final BlobId blobId, final boolean includeDeleted) {
     checkNotNull(blobId);
 
+    log.debug("Accessing blob {}", blobId);
+
     final S3Blob blob = liveBlobs.getUnchecked(blobId);
 
     if (blob.isStale()) {
@@ -345,8 +350,6 @@ public class S3BlobStore
       }
     }
 
-    log.debug("Accessing blob {}", blobId);
-
     return blob;
   }
 
@@ -356,7 +359,7 @@ public class S3BlobStore
       return expire(blobId, reason);
     }
     else {
-      return doDeleteHard(blobId);
+      return performHardDelete(blobId);
     }
   }
 
@@ -430,6 +433,15 @@ public class S3BlobStore
 
   @Override
   protected boolean doDeleteHard(final BlobId blobId) {
+    if (preferExpire && deleteByExpire()) {
+      return expire(blobId, "hard-delete");
+    }
+    else {
+      return performHardDelete(blobId);
+    }
+  }
+
+  private boolean performHardDelete(final BlobId blobId) {
     final S3Blob blob = liveBlobs.getUnchecked(blobId);
     Lock lock = blob.lock();
     try {
@@ -608,7 +620,7 @@ public class S3BlobStore
       S3BlobAttributes blobAttributes = new S3BlobAttributes(s3, getConfiguredBucket(), attributePath(blobId));
       return blobAttributes.load() ? blobAttributes : null;
     }
-    catch (IOException e) {
+    catch (Exception e) {
       log.error("Unable to load S3BlobAttributes for blob id: {}", blobId, e);
       return null;
     }

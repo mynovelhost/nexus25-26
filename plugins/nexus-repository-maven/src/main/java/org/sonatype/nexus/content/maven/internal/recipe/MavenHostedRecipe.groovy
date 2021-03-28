@@ -15,6 +15,7 @@ package org.sonatype.nexus.content.maven.internal.recipe
 import javax.annotation.Nonnull
 import javax.inject.Inject
 import javax.inject.Named
+import javax.inject.Provider
 import javax.inject.Singleton
 
 import org.sonatype.nexus.repository.Format
@@ -22,6 +23,7 @@ import org.sonatype.nexus.repository.Repository
 import org.sonatype.nexus.repository.Type
 import org.sonatype.nexus.repository.http.HttpMethods
 import org.sonatype.nexus.repository.maven.internal.Maven2Format
+import org.sonatype.nexus.repository.maven.internal.hosted.MavenHostedIndexFacet
 import org.sonatype.nexus.repository.maven.internal.matcher.MavenArchetypeCatalogMatcher
 import org.sonatype.nexus.repository.maven.internal.matcher.MavenIndexMatcher
 import org.sonatype.nexus.repository.maven.internal.matcher.MavenPathMatcher
@@ -38,7 +40,7 @@ import org.sonatype.nexus.repository.view.matchers.logic.LogicMatchers
 import static org.sonatype.nexus.repository.http.HttpHandlers.notFound
 
 /**
- * @since 3.25.0
+ * @since 3.25
  */
 @Named(Maven2HostedRecipe.NAME)
 @Singleton
@@ -46,6 +48,9 @@ class MavenHostedRecipe
     extends MavenRecipeSupport
     implements Maven2HostedRecipe
 {
+  @Inject
+  Provider<MavenHostedIndexFacet> mavenIndexFacet
+
   @Inject
   MavenHostedRecipe(@Named(HostedType.NAME) final Type type, @Named(Maven2Format.NAME) final Format format) {
     super(type, format)
@@ -55,8 +60,12 @@ class MavenHostedRecipe
   void apply(@Nonnull final Repository repository) throws Exception {
     repository.attach(securityFacet.get())
     repository.attach(configure(viewFacet.get()))
+    repository.attach(mavenMetadataRebuildFacet.get())
     repository.attach(mavenContentFacet.get())
+    repository.attach(searchFacet.get())
+    repository.attach(browseFacet.get())
     repository.attach(mavenArchetypeCatalogFacet.get())
+    repository.attach(mavenIndexFacet.get())
   }
 
   private ViewFacet configure(final ConfigurableViewFacet facet) {
@@ -69,6 +78,7 @@ class MavenHostedRecipe
         .handler(versionPolicyHandler)
         .handler(contentHeadersHandler)
         .handler(lastDownloadedHandler)
+        .handler(mavenMetadataRebuildHandler)
         .handler(mavenContentHandler)
         .create())
 

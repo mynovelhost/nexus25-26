@@ -34,7 +34,8 @@
 
       CONSTRAINT pk_${format}_asset_id PRIMARY KEY (asset_id),
       CONSTRAINT uk_${format}_asset_repository_path UNIQUE (repository_id, path),
-      CONSTRAINT fk_${format}_asset_repository_id FOREIGN KEY (repository_id)
+
+      CONSTRAINT fk_${format}_asset_repository FOREIGN KEY (repository_id)
          REFERENCES ${format}_content_repository (repository_id),
       CONSTRAINT fk_${format}_asset_component FOREIGN KEY (component_id)
          REFERENCES ${format}_component (component_id),
@@ -43,6 +44,8 @@
     );
 
     CREATE INDEX IF NOT EXISTS idx_${format}_asset_kind ON ${format}_asset (kind);
+    CREATE INDEX IF NOT EXISTS idx_${format}_asset_component ON ${format}_asset (component_id);
+    CREATE INDEX IF NOT EXISTS idx_${format}_asset_blob ON ${format}_asset (asset_blob_id);
     --
   </insert>
 
@@ -62,7 +65,7 @@
   </sql>
 
   <sql id="componentCoordinateMatch">
-    ${format}_component.repository_id = #{repositoryId}
+    C.repository_id = #{repositoryId}
         AND namespace = #{namespace} AND name = #{name} AND version = #{version}
   </sql>
 
@@ -80,17 +83,16 @@
   </select>
 
   <select id="countAssets" resultType="int">
-    SELECT COUNT(*) FROM ${format}_asset WHERE repository_id = #{repositoryId};
+    SELECT COUNT(*) FROM ${format}_asset WHERE repository_id = #{repositoryId}
+        <if test="kind != null"> AND kind = #{kind}</if>
+        <if test="filter != null"> AND ${filter}</if>;
   </select>
 
   <select id="browseAssets" resultMap="assetResult">
     SELECT * FROM ${format}_asset WHERE repository_id = #{repositoryId}
-    <if test="kind != null">
-      AND kind = #{kind}
-    </if>
-    <if test="continuationToken != null">
-      AND asset_id > #{continuationToken}
-    </if>
+        <if test="continuationToken != null"> AND asset_id > #{continuationToken}</if>
+        <if test="kind != null"> AND kind = #{kind}</if>
+        <if test="filter != null"> AND ${filter}</if>
     ORDER BY asset_id LIMIT #{limit};
   </select>
 
@@ -100,7 +102,7 @@
         SELECT * FROM ${format}_asset WHERE component_id = #{componentId};
       </when>
       <otherwise>
-        SELECT ${format}_asset.* FROM ${format}_asset INNER JOIN ${format}_component
+        SELECT A.* FROM ${format}_asset A INNER JOIN ${format}_component C
             USING (component_id) WHERE <include refid="componentCoordinateMatch"/>;
       </otherwise>
     </choose>
@@ -112,6 +114,10 @@
   </insert>
 
   <select id="readAsset" resultMap="assetResult">
+    SELECT * FROM ${format}_asset WHERE <include refid="assetMatch"/>;
+  </select>
+
+  <select id="readPath" resultMap="assetResult">
     SELECT * FROM ${format}_asset WHERE <include refid="assetPathMatch"/>;
   </select>
 
@@ -119,6 +125,10 @@
     UPDATE ${format}_asset SET kind = #{kind}, last_updated = CURRENT_TIMESTAMP
         WHERE <include refid="assetMatch"/> AND kind != #{kind};
   </update>
+
+  <select id="readAssetAttributes" resultType="NestedAttributesMap">
+    SELECT attributes FROM ${format}_asset WHERE <include refid="assetMatch"/>;
+  </select>
 
   <update id="updateAssetAttributes" parameterType="AssetData">
     UPDATE ${format}_asset SET attributes = #{attributes}, last_updated = CURRENT_TIMESTAMP
@@ -139,10 +149,6 @@
     DELETE FROM ${format}_asset WHERE <include refid="assetMatch"/>;
   </delete>
 
-  <delete id="deletePath">
-    DELETE FROM ${format}_asset WHERE <include refid="assetPathMatch"/>;
-  </delete>
-
   <delete id="deleteAssets">
     DELETE FROM ${format}_asset WHERE
         repository_id = #{repositoryId}
@@ -156,21 +162,19 @@
         <if test="limit gt 0"> LIMIT #{limit})</if>;
   </delete>
 
-  <delete id="purgeNotRecentlyDownloaded">
-    DELETE FROM ${format}_asset WHERE
-        repository_id = #{repositoryId}
-        AND component_id IS NULL
+  <select id="selectNotRecentlyDownloaded" resultType="int">
+    SELECT asset_id FROM ${format}_asset
+        WHERE repository_id = #{repositoryId} AND component_id IS NULL
         AND last_downloaded &lt;= CURRENT_TIMESTAMP - CAST(#{daysAgo} AS INT) * INTERVAL '1' DAY
         <if test="limit gt 0"> LIMIT #{limit}</if>;
+  </select>
+
+  <delete id="purgeSelectedAssets">
+    DELETE FROM ${format}_asset WHERE asset_id = ANY(#{assetIds});
   </delete>
 
-  <delete id="purgeNotRecentlyDownloaded" databaseId="PostgreSQL">
-    DELETE FROM ${format}_asset WHERE
-        <if test="limit gt 0"> asset_id IN (SELECT asset_id FROM ${format}_asset WHERE </if>
-        repository_id = #{repositoryId}
-        AND component_id IS NULL
-        AND last_downloaded &lt;= CURRENT_TIMESTAMP - CAST(#{daysAgo} AS INT) * INTERVAL '1' DAY
-        <if test="limit gt 0"> LIMIT #{limit})</if>;
+  <delete id="purgeSelectedAssets" databaseId="PostgreSQL">
+    DELETE FROM ${format}_asset WHERE asset_id = ANY(#{assetIds}::int[]);
   </delete>
 
 </mapper>

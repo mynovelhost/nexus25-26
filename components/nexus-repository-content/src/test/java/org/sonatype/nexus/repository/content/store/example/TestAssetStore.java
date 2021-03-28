@@ -19,6 +19,7 @@ import org.sonatype.nexus.common.entity.Continuation;
 import org.sonatype.nexus.datastore.api.DataSessionSupplier;
 import org.sonatype.nexus.repository.content.Asset;
 import org.sonatype.nexus.repository.content.store.AssetStore;
+import org.sonatype.nexus.repository.content.store.ContentStoreEventSender;
 import org.sonatype.nexus.transaction.Transactional;
 
 import com.google.inject.assistedinject.Assisted;
@@ -30,8 +31,11 @@ public class TestAssetStore
     extends AssetStore<TestAssetDAO>
 {
   @Inject
-  public TestAssetStore(final DataSessionSupplier sessionSupplier, @Assisted final String storeName) {
-    super(sessionSupplier, storeName, TestAssetDAO.class);
+  public TestAssetStore(final DataSessionSupplier sessionSupplier,
+                        final ContentStoreEventSender eventSender,
+                        @Assisted final String storeName)
+  {
+    super(sessionSupplier, eventSender, storeName, TestAssetDAO.class);
   }
 
   /**

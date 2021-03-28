@@ -12,9 +12,10 @@
  */
 package org.sonatype.nexus.repository.content.fluent;
 
-import javax.annotation.Nullable;
+import java.util.Map;
+import java.util.Optional;
 
-import org.sonatype.nexus.common.entity.Continuation;
+import org.sonatype.nexus.common.entity.EntityId;
 import org.sonatype.nexus.repository.content.Asset;
 
 /**
@@ -23,6 +24,7 @@ import org.sonatype.nexus.repository.content.Asset;
  * @since 3.21
  */
 public interface FluentAssets
+    extends FluentQuery<FluentAsset>
 {
   /**
    * Start building an asset, beginning with its path.
@@ -35,19 +37,27 @@ public interface FluentAssets
   FluentAsset with(Asset asset);
 
   /**
-   * Count all assets in the repository.
+   * Query assets that have the given kind.
+   *
+   * @since 3.26
    */
-  int count();
+  FluentQuery<FluentAsset> byKind(String kind);
 
   /**
-   * Browse through all assets in the repository.
+   * Query assets that match the given filter.
+   * <p>
+   * A filter parameter of {@code foo} should be referred to in the filter string as <code>#{filterParams.foo}</code>
+   * <p>
+   * <b>WARNING</b> the filter string is appended to the query and should only contain trusted content!
+   *
+   * @since 3.26
    */
-  default Continuation<FluentAsset> browse(int limit, @Nullable String continuationToken) {
-    return browse(null, limit, continuationToken);
-  }
+  FluentQuery<FluentAsset> byFilter(String filter, Map<String, Object> filterParams);
 
   /**
-   * Browse through all assets in the repository by kind.
+   * Find if an asset exists that has the given external id.
+   *
+   * @since 3.26
    */
-  Continuation<FluentAsset> browse(@Nullable String kind, int limit, @Nullable String continuationToken);
+  Optional<FluentAsset> find(EntityId externalId);
 }

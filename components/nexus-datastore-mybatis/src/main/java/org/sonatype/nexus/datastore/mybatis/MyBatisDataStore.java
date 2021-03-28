@@ -19,6 +19,7 @@ import java.io.UncheckedIOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
+import java.lang.reflect.Type;
 import java.net.URL;
 import java.nio.file.Path;
 import java.sql.Connection;
@@ -26,6 +27,7 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -68,6 +70,8 @@ import org.sonatype.nexus.security.PasswordHelper;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Splitter;
 import com.google.common.base.Splitter.MapSplitter;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Streams;
 import com.google.common.io.Resources;
 import com.google.inject.Key;
 import com.google.inject.TypeLiteral;
@@ -81,9 +85,8 @@ import org.apache.ibatis.plugin.Interceptor;
 import org.apache.ibatis.reflection.factory.DefaultObjectFactory;
 import org.apache.ibatis.session.Configuration;
 import org.apache.ibatis.session.SqlSession;
-import org.apache.ibatis.session.SqlSessionFactory;
-import org.apache.ibatis.session.defaults.DefaultSqlSessionFactory;
 import org.apache.ibatis.transaction.jdbc.JdbcTransactionFactory;
+import org.apache.ibatis.type.BaseTypeHandler;
 import org.apache.ibatis.type.OffsetDateTimeTypeHandler;
 import org.apache.ibatis.type.TypeAliasRegistry;
 import org.apache.ibatis.type.TypeHandler;
@@ -141,7 +144,9 @@ public class MyBatisDataStore
 
   private static final Pattern MAPPER_BODY = compile(".*<mapper[^>]*>(.*)</mapper>", DOTALL);
 
-  private final Set<Class<?>> accessTypes = new HashSet<>();
+  private final Iterable<? extends BeanEntry<Named, Class<DataAccess>>> declaredAccessTypes;
+
+  private final Set<Class<?>> registeredAccessTypes = new HashSet<>();
 
   private final AtomicBoolean frozenMarker = new AtomicBoolean();
 
@@ -155,7 +160,7 @@ public class MyBatisDataStore
 
   private HikariDataSource dataSource;
 
-  private SqlSessionFactory sessionFactory;
+  private Configuration mybatisConfig;
 
   @Nullable
   private Predicate<String> sensitiveAttributeFilter;
@@ -173,6 +178,10 @@ public class MyBatisDataStore
     this.beanLocator = checkNotNull(beanLocator);
 
     useMyBatisClassLoaderForEntityProxies();
+
+    // any DAO types in plugins are bound by DataAccessModule so we can locate them here
+    // (the same bindings are used to drive store registration in DataStoreManagerImpl)
+    this.declaredAccessTypes = beanLocator.locate(new Key<Class<DataAccess>>() {});
   }
 
   @VisibleForTesting
@@ -188,6 +197,8 @@ public class MyBatisDataStore
     }
     this.directories = null;
     this.beanLocator = null;
+
+    this.declaredAccessTypes = ImmutableList.of();
   }
 
   @Override
@@ -196,7 +207,7 @@ public class MyBatisDataStore
 
     dataSource = new HikariDataSource(configureHikari(storeName, attributes));
     Environment environment = new Environment(storeName, new JdbcTransactionFactory(), dataSource);
-    sessionFactory = new DefaultSqlSessionFactory(configureMyBatis(environment));
+    mybatisConfig = configureMyBatis(environment);
 
     registerCommonTypeHandlers(isContentStore);
 
@@ -209,8 +220,8 @@ public class MyBatisDataStore
 
   @Override
   protected void doStop() throws Exception {
-    sessionFactory = null;
-    accessTypes.clear();
+    mybatisConfig = null;
+    registeredAccessTypes.clear();
     try {
       dataSource.close();
     }
@@ -221,7 +232,7 @@ public class MyBatisDataStore
 
   @Override
   public void register(final Class<? extends DataAccess> accessType) {
-    if (!accessTypes.add(accessType) || accessType.isAnnotationPresent(SchemaTemplate.class)) {
+    if (!registeredAccessTypes.add(accessType) || accessType.isAnnotationPresent(SchemaTemplate.class)) {
       return; // skip registration if we've already seen this type or this is a template
     }
 
@@ -230,8 +241,10 @@ public class MyBatisDataStore
 
     // finally create the schema for this DAO
     info("Creating schema for {}", accessType.getSimpleName());
-    try (SqlSession session = sessionFactory.openSession()) {
-      session.getMapper(accessType).createSchema();
+    try (SqlSession session = new DataAccessSqlSession(mybatisConfig)) {
+      DataAccess dao = session.getMapper(accessType);
+      dao.createSchema();
+      dao.extendSchema();
       session.commit();
     }
   }
@@ -244,7 +257,7 @@ public class MyBatisDataStore
   @Guarded(by = STARTED)
   @Override
   public MyBatisDataSession openSession() {
-    return new MyBatisDataSession(sessionFactory.openSession());
+    return new MyBatisDataSession(new DataAccessSqlSession(mybatisConfig));
   }
 
   @Guarded(by = STARTED)
@@ -352,7 +365,7 @@ public class MyBatisDataStore
    */
   @SuppressWarnings("unchecked")
   private void registerCommonTypeHandlers(boolean isContentStore) {
-    boolean lenient = configurePlaceholderTypes(sessionFactory.getConfiguration());
+    boolean lenient = configurePlaceholderTypes(mybatisConfig);
 
     // register raw/simple mappers first
     register(new ListTypeHandler());
@@ -381,7 +394,7 @@ public class MyBatisDataStore
       registerDetached(new EncryptedStringTypeHandler()); // detached so it doesn't apply to all Strings
 
       // enable automatic encryption of sensitive JSON fields in the config store
-      sensitiveAttributeFilter = buildSensitiveAttributeFilter(sessionFactory.getConfiguration());
+      sensitiveAttributeFilter = buildSensitiveAttributeFilter(mybatisConfig);
     }
 
     // finally register more complex mappers on top of the raw/simple mappers - this way we can have
@@ -427,7 +440,7 @@ public class MyBatisDataStore
    * Register simple package-less aliases for all parameter and return types in the DAO.
    */
   private void registerSimpleAliases(final Class<? extends DataAccess> accessType) {
-    TypeAliasRegistry registry = sessionFactory.getConfiguration().getTypeAliasRegistry();
+    TypeAliasRegistry registry = mybatisConfig.getTypeAliasRegistry();
     TypeLiteral<?> resolvedType = TypeLiteral.get(accessType);
     for (Method method : accessType.getMethods()) {
       for (TypeLiteral<?> parameterType : resolvedType.getParameterTypes(method)) {
@@ -490,7 +503,7 @@ public class MyBatisDataStore
     }
 
     // MyBatis will load the corresponding XML schema
-    sessionFactory.getConfiguration().addMapper(accessType);
+    mybatisConfig.addMapper(accessType);
   }
 
   /**
@@ -534,8 +547,6 @@ public class MyBatisDataStore
     try {
       log.trace(xml);
 
-      Configuration mybatisConfig = sessionFactory.getConfiguration();
-
       XMLMapperBuilder xmlParser = new XMLMapperBuilder(
           new ByteArrayInputStream(xml.getBytes(UTF_8)),
           mybatisConfig,
@@ -559,30 +570,48 @@ public class MyBatisDataStore
 
   /**
    * Finds the expected access type for the expected template type, given the current access and template types.
-   * To simplify matters we assume the current and expected access types are in the same package and classloader.
    */
   private Class expectedAccessType(final Class currentAccessType,
                                    final Class currentTemplateType,
                                    final Class expectedTemplateType)
   {
-    String currentSuffix = currentTemplateType.getSimpleName();
-    String expectedSuffix = expectedTemplateType.getSimpleName();
+    String currentTemplateName = currentTemplateType.getSimpleName();
+    String expectedTemplateName = expectedTemplateType.getSimpleName();
 
-    // org.example.MavenAssetDAO / AssetDAO / ComponentDAO = org.example.MavenComponentDAO
-    String expectedAccessName = currentAccessType.getName().replace(currentSuffix, expectedSuffix);
-    Class expectedAccessType;
-    try {
-      expectedAccessType = currentAccessType.getClassLoader().loadClass(expectedAccessName);
-    }
-    catch (Exception | LinkageError e) {
-      throw new TypeNotPresentException(expectedAccessName, e);
-    }
+    // MavenAssetDAO -> s/AssetDAO/ComponentDAO/ -> MavenComponentDAO
+    String currentAccessName = currentAccessType.getSimpleName();
+    String expectedAccessName = currentAccessName.replace(currentTemplateName, expectedTemplateName);
+
+    // check registered types first (includes UT registered DAOs) before searching declared DAOs
+    Class expectedAccessType = findRegisteredAccessType(expectedAccessName)
+        .orElseGet(() -> findDeclaredAccessType(expectedAccessName)
+            .orElseThrow(() -> new IllegalArgumentException(
+                "Access type " + expectedAccessName + " expected by " + currentAccessType + " is missing")));
 
     // sanity check that this type has the expected class hierarchy
     checkArgument(expectedTemplateType.isAssignableFrom(expectedAccessType),
         "%s must extend %s", expectedAccessType, expectedTemplateType);
 
     return expectedAccessType;
+  }
+
+  /**
+   * Returns the first DAO with the given simpleName registered with this store.
+   */
+  private Optional<Class<?>> findRegisteredAccessType(final String simpleName) {
+    return registeredAccessTypes.stream()
+        .filter(accessType -> simpleName.equals(accessType.getSimpleName()))
+        .findFirst();
+  }
+
+  /**
+   * Returns the first DAO with the given simpleName declared by a plugin/bundle.
+   */
+  private Optional<? extends Class> findDeclaredAccessType(final String simpleName) {
+    return Streams.stream(declaredAccessTypes)
+        .map(BeanEntry::getValue)
+        .filter(accessType -> simpleName.equals(accessType.getSimpleName()))
+        .findFirst();
   }
 
   /**
@@ -622,7 +651,7 @@ public class MyBatisDataStore
    */
   @VisibleForTesting
   public void register(final Interceptor interceptor) {
-    sessionFactory.getConfiguration().addInterceptor(interceptor);
+    mybatisConfig.addInterceptor(interceptor);
     info(REGISTERED_MESSAGE, interceptor.getClass().getSimpleName());
   }
 
@@ -651,11 +680,6 @@ public class MyBatisDataStore
     info(REGISTERED_MESSAGE, handler.getClass().getSimpleName() + " (detached)");
   }
 
-  @Override
-  public String getDatabaseId() {
-    return sessionFactory.getConfiguration().getDatabaseId();
-  }
-
   /**
    * Prepare the {@link TypeHandler} for use with this datastore.
    */
@@ -666,8 +690,11 @@ public class MyBatisDataStore
     if (sensitiveAttributeFilter != null && handler instanceof AbstractJsonTypeHandler<?>) {
       ((AbstractJsonTypeHandler<?>) handler).encryptSensitiveFields(passwordHelper, sensitiveAttributeFilter);
     }
-    Configuration mybatisConfig = sessionFactory.getConfiguration();
     registerSimpleAlias(mybatisConfig.getTypeAliasRegistry(), handler.getClass());
+    Type handledType = ((BaseTypeHandler) handler).getRawType();
+    if (handledType instanceof Class<?>) {
+      registerSimpleAlias(mybatisConfig.getTypeAliasRegistry(), (Class<?>) handledType);
+    }
     return mybatisConfig.getTypeHandlerRegistry();
   }
 

@@ -101,7 +101,9 @@ class RawProxyRecipe
     repository.attach(negativeCacheFacet.get())
     repository.attach(proxyFacet.get())
     repository.attach(contentFacet.get())
+    repository.attach(maintenanceFacet.get())
     repository.attach(searchFacet.get())
+    repository.attach(browseFacet.get())
     repository.attach(purgeUnusedFacet.get())
   }
 

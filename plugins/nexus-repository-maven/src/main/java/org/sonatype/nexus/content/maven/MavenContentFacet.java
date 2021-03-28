@@ -14,6 +14,7 @@ package org.sonatype.nexus.content.maven;
 
 import java.io.IOException;
 import java.util.Optional;
+import java.util.Set;
 
 import org.sonatype.nexus.repository.Facet;
 import org.sonatype.nexus.repository.content.facet.ContentFacet;
@@ -21,22 +22,27 @@ import org.sonatype.nexus.repository.maven.LayoutPolicy;
 import org.sonatype.nexus.repository.maven.MavenPath;
 import org.sonatype.nexus.repository.maven.MavenPathParser;
 import org.sonatype.nexus.repository.maven.VersionPolicy;
+import org.sonatype.nexus.repository.view.Content;
 import org.sonatype.nexus.repository.view.Payload;
 
 /**
  * Provides persistence operations for Maven.
  *
- * @since 3.25.0
+ * @since 3.25
  */
 @Facet.Exposed
 public interface MavenContentFacet
     extends ContentFacet
 {
-  Optional<Payload> get(String path) throws IOException;
+  Optional<Content> get(MavenPath mavenPath) throws IOException;
 
-  Payload put(MavenPath path, Payload content) throws IOException;
+  Content put(MavenPath path, Payload content) throws IOException;
 
   boolean delete(MavenPath path) throws IOException;
+
+  Set<String> deleteWithHashes(MavenPath path) throws IOException;
+
+  boolean exists(MavenPath mavenPath);
 
   MavenPathParser getMavenPathParser();
 

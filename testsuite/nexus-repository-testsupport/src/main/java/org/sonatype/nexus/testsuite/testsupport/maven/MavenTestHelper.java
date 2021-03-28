@@ -27,6 +27,7 @@ import org.sonatype.nexus.pax.exam.NexusPaxExamSupport;
 import org.sonatype.nexus.repository.Repository;
 import org.sonatype.nexus.repository.view.Payload;
 
+import com.google.common.base.Strings;
 import org.apache.commons.compress.utils.IOUtils;
 import org.apache.http.HttpEntity;
 import org.apache.http.client.methods.CloseableHttpResponse;
@@ -35,6 +36,7 @@ import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.maven.artifact.repository.metadata.Metadata;
 import org.apache.maven.artifact.repository.metadata.io.xpp3.MetadataXpp3Reader;
+import org.joda.time.DateTime;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.notNullValue;
@@ -87,6 +89,9 @@ public abstract class MavenTestHelper
   public abstract void writeWithoutValidation(Repository repository, String path, Payload payload) throws IOException;
 
   public abstract void verifyHashesExistAndCorrect(Repository repository, String path) throws Exception;
+
+  public abstract DateTime getLastDownloadedTime(final Repository repository, final String assetPath)
+      throws IOException;
 
   public Metadata parseMetadata(final Repository repository, final String path) throws Exception {
     try (Payload payload = read(repository, path)) {
@@ -210,4 +215,31 @@ public abstract class MavenTestHelper
       }
     }
   }
+
+  public void rebuildMetadata(
+      final Repository repository,
+      final String groupId,
+      final String artifactId,
+      final String baseVersion,
+      final boolean rebuildChecksums) {
+    final boolean update = !Strings.isNullOrEmpty(groupId)
+        || !Strings.isNullOrEmpty(artifactId)
+        || !Strings.isNullOrEmpty(baseVersion);
+    rebuildMetadata(repository, groupId, artifactId, baseVersion, rebuildChecksums, update);
+  }
+
+  public abstract void rebuildMetadata(
+      final Repository repository,
+      final String groupId,
+      final String artifactId,
+      final String baseVersion,
+      final boolean rebuildChecksums,
+      final boolean update);
+
+  /**
+   * Delete test Components with the given version, confirming that a certain number exist first.
+   */
+  public abstract void deleteComponents(final Repository repository, final String version, final int expectedNumber);
+
+  public abstract void deleteAssets(final Repository repository, final String version, final int expectedNumber);
 }

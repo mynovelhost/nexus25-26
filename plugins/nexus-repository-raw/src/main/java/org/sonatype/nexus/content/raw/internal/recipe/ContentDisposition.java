@@ -13,7 +13,7 @@
 package org.sonatype.nexus.content.raw.internal.recipe;
 
 /**
- * @since 3.25.0
+ * @since 3.25
  */
 public enum ContentDisposition
 {

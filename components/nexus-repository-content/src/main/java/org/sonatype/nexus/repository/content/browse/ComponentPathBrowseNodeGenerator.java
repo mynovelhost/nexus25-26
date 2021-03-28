@@ -16,9 +16,6 @@ import java.util.List;
 
 import org.sonatype.nexus.repository.browse.node.BrowsePath;
 import org.sonatype.nexus.repository.content.Asset;
-import org.sonatype.nexus.repository.content.Component;
-
-import static java.util.Optional.of;
 
 /**
  * Component-led layout that places components one level above their assets.
@@ -29,8 +26,8 @@ public abstract class ComponentPathBrowseNodeGenerator
     extends AssetPathBrowseNodeGenerator
 {
   @Override
-  public List<BrowsePath> computeComponentPaths(final Asset asset, final Component component) {
-    List<BrowsePath> assetPaths = computeAssetPaths(asset, of(component));
+  public List<BrowsePath> computeComponentPaths(final Asset asset) {
+    List<BrowsePath> assetPaths = computeAssetPaths(asset);
     return assetPaths.subList(0, assetPaths.size() - 1);
   }
 }

@@ -60,7 +60,7 @@ import static org.sonatype.nexus.repository.search.index.SearchConstants.VERSION
 /**
  * Default {@link SearchDocumentProducer} that combines properties of components and their assets.
  *
- * @since 3.25.0
+ * @since 3.25
  */
 @Named
 @Singleton
@@ -105,8 +105,13 @@ public class DefaultSearchDocumentProducer
       Map<String, Object> assetDoc = new HashMap<>();
       assetDoc.put(ID, internalAssetId(asset));
       assetDoc.put(NAME, asset.path());
-      assetDoc.put(CONTENT_TYPE, asset.blob().map(AssetBlob::contentType).orElse(""));
-      assetDoc.put(ATTRIBUTES, asset.attributes().backing());
+      Map<String, Object> attributes = new HashMap<>(asset.attributes().backing());
+      assetDoc.put(CONTENT_TYPE, "");
+      asset.blob().ifPresent(blob -> {
+        assetDoc.put(CONTENT_TYPE, blob.contentType());
+        attributes.put("checksum", blob.checksums());
+      });
+      assetDoc.put(ATTRIBUTES, attributes);
       assetDocs.add(assetDoc);
     }
     if (!assetDocs.isEmpty()) {

@@ -90,7 +90,7 @@ public interface BlobStore
    *
    * (uses 'Bucket' prefix for legacy compatibility reasons)
    *
-   * @since 3.25.0
+   * @since 3.25
    */
   String REPO_NAME_HEADER = "Bucket.repo-name";
 

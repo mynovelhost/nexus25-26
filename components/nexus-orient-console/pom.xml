@@ -20,7 +20,7 @@
   <parent>
     <groupId>org.sonatype.nexus</groupId>
     <artifactId>nexus-components</artifactId>
-    <version>3.25.1-02</version>
+    <version>3.26.0-04</version>
   </parent>
 
   <artifactId>nexus-orient-console</artifactId>
@@ -82,7 +82,7 @@
               -->
               <Class-Path>
                 ../${project.artifactMap(org.bouncycastle:bcprov-jdk15to18).file.name}
-                ../boot/org.${project.artifactMap(org.osgi:osgi.core).file.name}
+                ../boot/${project.artifactMap(org.osgi:osgi.core).file.name}
               </Class-Path>
             </manifestEntries>
           </archive>

@@ -17,10 +17,13 @@ import javax.inject.Provider
 
 import org.sonatype.nexus.content.maven.MavenArchetypeCatalogFacet
 import org.sonatype.nexus.content.maven.MavenContentFacet
+import org.sonatype.nexus.content.maven.MavenMetadataRebuildFacet
 import org.sonatype.nexus.content.maven.internal.VersionPolicyHandler
 import org.sonatype.nexus.repository.Format
 import org.sonatype.nexus.repository.RecipeSupport
 import org.sonatype.nexus.repository.Type
+import org.sonatype.nexus.repository.content.browse.BrowseFacet
+import org.sonatype.nexus.repository.content.search.SearchFacet
 import org.sonatype.nexus.repository.http.PartialFetchHandler
 import org.sonatype.nexus.repository.maven.MavenPathParser
 import org.sonatype.nexus.repository.maven.internal.MavenSecurityFacet
@@ -34,9 +37,12 @@ import org.sonatype.nexus.repository.view.handlers.HandlerContributor
 import org.sonatype.nexus.repository.view.handlers.LastDownloadedHandler
 import org.sonatype.nexus.repository.view.handlers.TimingHandler
 
+import groovy.transform.CompileStatic
+
 /**
- * @since 3.25.0
+ * @since 3.25
  */
+@CompileStatic
 abstract class MavenRecipeSupport
     extends RecipeSupport
 {
@@ -87,10 +93,22 @@ abstract class MavenRecipeSupport
   MavenArchetypeCatalogHandler archetypeCatalogHandler
 
   @Inject
+  MavenMetadataRebuildHandler mavenMetadataRebuildHandler
+
+  @Inject
   Provider<MavenContentFacet> mavenContentFacet
 
   @Inject
+  Provider<SearchFacet> searchFacet
+
+  @Inject
+  Provider<BrowseFacet> browseFacet
+
+  @Inject
   Provider<MavenArchetypeCatalogFacet> mavenArchetypeCatalogFacet
+
+  @Inject
+  Provider<MavenMetadataRebuildFacet> mavenMetadataRebuildFacet
 
   protected MavenRecipeSupport(final Type type, final Format format) {
     super(type, format)

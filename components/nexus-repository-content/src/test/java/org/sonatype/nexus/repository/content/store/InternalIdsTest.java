@@ -12,10 +12,13 @@
  */
 package org.sonatype.nexus.repository.content.store;
 
+import java.security.SecureRandom;
 import java.util.OptionalInt;
 import java.util.function.IntSupplier;
 
 import org.sonatype.goodies.testsupport.TestSupport;
+import org.sonatype.goodies.testsupport.group.Slow;
+import org.sonatype.nexus.common.entity.EntityId;
 import org.sonatype.nexus.repository.content.Asset;
 import org.sonatype.nexus.repository.content.AssetBlob;
 import org.sonatype.nexus.repository.content.Component;
@@ -24,7 +27,9 @@ import org.sonatype.nexus.repository.content.facet.ContentFacetSupport;
 import org.sonatype.nexus.repository.content.fluent.internal.FluentAssetImpl;
 import org.sonatype.nexus.repository.content.fluent.internal.FluentComponentImpl;
 
+import org.junit.Ignore;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.mockito.Mock;
 
 import static org.hamcrest.Matchers.is;
@@ -34,7 +39,7 @@ import static org.junit.Assert.fail;
 import static org.sonatype.nexus.repository.content.store.InternalIds.internalAssetBlobId;
 import static org.sonatype.nexus.repository.content.store.InternalIds.internalAssetId;
 import static org.sonatype.nexus.repository.content.store.InternalIds.internalComponentId;
-import static org.sonatype.nexus.repository.content.store.InternalIds.internalRepositoryId;
+import static org.sonatype.nexus.repository.content.store.InternalIds.contentRepositoryId;
 
 /**
  * Test {@link InternalIds}.
@@ -55,13 +60,13 @@ public class InternalIdsTest
     Component fluentComponent = new FluentComponentImpl(contentFacet, component);
     Asset fluentAsset = new FluentAssetImpl(contentFacet, asset);
 
-    checkIllegalState(() -> internalRepositoryId(repository));
-    checkIllegalState(() -> internalRepositoryId(component));
-    checkIllegalState(() -> internalRepositoryId(fluentComponent));
+    checkIllegalState(() -> contentRepositoryId(repository));
+    checkIllegalState(() -> contentRepositoryId(component));
+    checkIllegalState(() -> contentRepositoryId(fluentComponent));
     checkIllegalState(() -> internalComponentId(component));
     checkIllegalState(() -> internalComponentId(fluentComponent));
-    checkIllegalState(() -> internalRepositoryId(asset));
-    checkIllegalState(() -> internalRepositoryId(fluentAsset));
+    checkIllegalState(() -> contentRepositoryId(asset));
+    checkIllegalState(() -> contentRepositoryId(fluentAsset));
     checkIllegalState(() -> internalAssetId(asset));
     checkIllegalState(() -> internalAssetId(fluentAsset));
     checkIllegalState(() -> internalAssetBlobId(assetBlob));
@@ -91,13 +96,13 @@ public class InternalIdsTest
     Component fluentComponent = new FluentComponentImpl(contentFacet, component);
     Asset fluentAsset = new FluentAssetImpl(contentFacet, asset);
 
-    assertThat(internalRepositoryId(repository), is(1));
-    assertThat(internalRepositoryId(component), is(5));
-    assertThat(internalRepositoryId(fluentComponent), is(5));
+    assertThat(contentRepositoryId(repository), is(1));
+    assertThat(contentRepositoryId(component), is(5));
+    assertThat(contentRepositoryId(fluentComponent), is(5));
     assertThat(internalComponentId(component), is(2));
     assertThat(internalComponentId(fluentComponent), is(2));
-    assertThat(internalRepositoryId(asset), is(6));
-    assertThat(internalRepositoryId(fluentAsset), is(6));
+    assertThat(contentRepositoryId(asset), is(6));
+    assertThat(contentRepositoryId(fluentAsset), is(6));
     assertThat(internalAssetId(asset), is(3));
     assertThat(internalAssetId(fluentAsset), is(3));
     assertThat(internalAssetBlobId(assetBlob), is(4));
@@ -120,5 +125,28 @@ public class InternalIdsTest
 
   private static void checkNotPresent(final OptionalInt underTest) {
     assertFalse(underTest.isPresent());
+  }
+
+  @Test
+  public void testExternalIdRoundTrip() {
+    SecureRandom random = new SecureRandom();
+    for (int numIds = 0; numIds < 1_000_000; numIds++) {
+      assertExternalIdRoundTrip(1 + random.nextInt(Integer.MAX_VALUE));
+    }
+  }
+
+  @Ignore("uncomment to test all external ids are reversible and unique")
+  @Category(Slow.class)
+  @Test
+  public void testExternalIdUniqueness() {
+    for (int expected = 0; expected < Integer.MAX_VALUE; expected++) {
+      assertExternalIdRoundTrip(1 + expected);
+    }
+  }
+
+  private void assertExternalIdRoundTrip(int expected) {
+    EntityId externalId = InternalIds.toExternalId(expected);
+    int internalId = InternalIds.toInternalId(externalId);
+    assertThat(internalId, is(expected));
   }
 }
